@@ -5,7 +5,7 @@ from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
 from forms import UserAddForm, LoginForm, MessageForm, UserEditForm
-from models import db, connect_db, User, Message
+from models import Likes, db, connect_db, User, Message
 
 CURR_USER_KEY = "curr_user"
 
@@ -220,27 +220,23 @@ def show_likes(user_id):
     return render_template('users/likes.html', user=user, likes=user.likes)
 
 
-@app.route('/messages/<int:message_id>/like', methods=['POST'])
-def add_like(message_id):
-    
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
-
-    liked_message = Message.query.get_or_404(message_id)
-    if liked_message.user_id == g.user.id:
-        return abort(403)
-
-    user_likes = g.user.likes
-
-    if liked_message in user_likes:
-        g.user.likes = [like for like in user_likes if like != liked_message]
-    else:
-        g.user.likes.append(liked_message)
-
+@app.route('/users/add_like/<int:message_id>', methods=['POST'])
+def like_message(message_id):
+    message = Message.query.get_or_404(message_id)
+    like = Likes(user_id=g.user.id, message_id=message.id)
+    db.session.add(like)
     db.session.commit()
+    return redirect('/')
 
-    return redirect("/")
+
+@app.route('/users/dislike/<int:message_id>', methods=['POST'])
+def dislike_message(message_id):
+    message = Message.query.get_or_404(message_id)
+    like = Likes.query.filter(
+        Likes.message_id == message.id, Likes.user_id == g.user.id).first()
+    db.session.delete(like)
+    db.session.commit()
+    return redirect('/')
 
 
 @app.route('/users/profile', methods=["GET", "POST"])
@@ -338,7 +334,10 @@ def messages_add():
 @app.route('/messages/<int:message_id>', methods=["GET"])
 def messages_show(message_id):
     """Show a message."""
-
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+        
     msg = Message.query.get(message_id)
     return render_template('messages/show.html', message=msg)
 
@@ -352,10 +351,13 @@ def messages_destroy(message_id):
         return redirect("/")
 
     msg = Message.query.get(message_id)
-    db.session.delete(msg)
-    db.session.commit()
+    if msg.user_id == g.user.id:
+        db.session.delete(msg)
+        db.session.commit()
+        return redirect(f"/users/{g.user.id}")
 
-    return redirect(f"/users/{g.user.id}")
+    flash("Access unauthorized.", "danger")
+    return redirect("/")
 
 
 ##############################################################################
@@ -371,25 +373,19 @@ def homepage():
     """
 
     if g.user:
-        msg_list = []
+        following_ids = [user.id for user in g.user.following] + [g.user.id]
         messages = (Message
                     .query
+                    .filter(Message.user_id.in_(following_ids))
                     .order_by(Message.timestamp.desc())
+                    .limit(100)
                     .all())
-        for message in messages:
-            if message.user.id == g.user.id:
-                msg_list.apped(message)
-            else:
-                msg_followers = message.user.followers
-                for follower in msg_followers:
-                    if follower.id == g.user.id or message.user.id == g.user.id:
-                        msg_list.append(message)
+        likes = [like.id for like in g.user.likes]
 
-        return render_template('home.html', messages=msg_list[:100])
+        return render_template('home.html', messages=messages, likes=likes)
 
     else:
         return render_template('home-anon.html')
-
 
 ##############################################################################
 # Turn off all caching in Flask

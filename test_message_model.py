@@ -40,7 +40,7 @@ class UserModelTestCase(TestCase):
         return res
 
     def test_message_model(self):
-        """Does basic model work?"""
+    
         
         m = Message(
             text="a warble",
