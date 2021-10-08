@@ -338,7 +338,7 @@ def messages_show(message_id):
         flash("Access unauthorized.", "danger")
         return redirect("/")
         
-    msg = Message.query.get(message_id)
+    msg = Message.query.get_or_404(message_id)
     return render_template('messages/show.html', message=msg)
 
 

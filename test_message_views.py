@@ -92,6 +92,14 @@ class MessageViewTestCase(TestCase):
             self.assertIn(m.text, str(resp.data))
 
     def test_invalid_message_show(self):
+        m = Message(
+            id=1234,
+            text="a test message",
+            user_id=self.testuser_id
+        )
+        
+        db.session.add(m)
+        db.session.commit()
         with self.client as c:
             with c.session_transaction() as sess:
                 sess[CURR_USER_KEY] = self.testuser.id
